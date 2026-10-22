@@ -11,6 +11,6 @@ The Phase 1 guide downloads this same pinned source.
 
 ## Phase 2 derivative
 
-`phase-2-serial/ArduinoISP_Relay/ArduinoISP_Relay.ino` is generated from the preserved Phase 1 standard ArduinoISP source using `phase-2-serial/prepare_relay.sh`. The upstream notice remains in the generated file. Added code initializes SoftwareSerial on Uno D4 and switches between programming and telemetry with an input on Uno D2.
+`phase-2-serial/ArduinoISP_Relay/ArduinoISP_Relay.ino` is generated from the preserved Phase 1 standard ArduinoISP source using `phase-2-serial/prepare_relay.sh`. The upstream notice remains in the generated file. Added code initializes SoftwareSerial on Uno D4 and forwards telemetry while idle, with priority for programmer requests.
 
 SoftwareSerial is supplied by the pinned Arduino AVR core, installed by project setup. It is not vendored in this update package.

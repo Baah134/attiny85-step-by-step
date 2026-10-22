@@ -98,16 +98,12 @@ def main():
         assert not has(calls, 'program')
         result, calls = run('flash failure prevents monitor', ['./phase-2-serial/burn.sh', '-p', '/dev/cu.mock', '-m'], 9, text='\n\n', TEST_PROGRAM_FAIL='9')
         assert not has(calls, 'monitor') and 'Programming succeeded' not in result.stdout
-        result, calls = run('combined burn and monitor waits for both modes', ['./phase-2-serial/burn.sh', '-p', '/dev/cu.mock', '-m'], text='\n\n')
+        result, calls = run('combined burn opens monitor automatically', ['./phase-2-serial/burn.sh', '-p', '/dev/cu.mock', '-m'], text='\n')
         assert has(calls, 'program') and has(calls, 'monitor')
         assert next(c for c in calls if 'monitor' in c)[-1] == 'baudrate=19200'
-        assert 'Disconnect Uno D2' in result.stdout and 'Connect Uno D2' in result.stdout
-        _, calls = run('second confirmation EOF prevents monitor', ['./phase-2-serial/burn.sh', '-p', '/dev/cu.mock', '-m'], 1, text='\n')
-        assert has(calls, 'program') and not has(calls, 'monitor')
-        _, calls = run('standalone monitor does not program', ['./phase-2-serial/monitor.sh', '/dev/cu.mock'], text='\n')
+        assert 'reset capacitor connected' in result.stdout
+        _, calls = run('standalone monitor works without input and does not program', ['./phase-2-serial/monitor.sh', '/dev/cu.mock'])
         assert has(calls, 'monitor') and not has(calls, 'program')
-        _, calls = run('closed monitor confirmation stops', ['./phase-2-serial/monitor.sh', '/dev/cu.mock'], 1)
-        assert not has(calls, 'monitor')
         run('monitor errors propagate', ['./phase-2-serial/monitor.sh', '/dev/cu.mock'], 10, text='\n', TEST_MONITOR_FAIL='10')
         hexf = root / 'prebuilt firmware.hex'
         hexf.write_text(':00000001FF\n')

@@ -12,4 +12,4 @@ Keep all Phase 1 files, `setup.sh`, `cli.sh`, `scripts`, and the existing Phase 
 
 On the computer used for the presentation, copy the Phase 2 files into the same working project where Phase 1 runs. Open `docs/phase-2-serial.md` and follow it in order. The shell scripts are invoked with `bash`, so manual execute-permission changes are not required after a browser upload/download.
 
-Important new hardware step: add a mode jumper between **Uno digital pin 2 and Uno GND**. Keep it open for programming; connect it to GND for telemetry. The target's TX wire is **ATtiny85 physical pin 2 (PB3) → Uno digital pin 4**. These are different connections.
+The only added signal wire is **ATtiny85 physical pin 2 (PB3) → Uno digital pin 4**. Keep the existing power, ground, ISP, LED, and reset-capacitor connections. No extra mode jumper is needed.

@@ -48,7 +48,7 @@ else
     [ -s "$HEX_FILE" ] || fail "Expected compiled HEX file missing: $HEX_FILE"
 fi
 
-printf 'Keep the Uno reset capacitor connected. Disconnect Uno D2 from GND, then press ENTER: '
+printf 'Keep the Uno reset capacitor connected, then press ENTER to program: '
 read -r answer || fail "No confirmation received; stopping."
 echo "Programming ATtiny85 at 8 MHz through $PORT..."
 "$PHASE_AVRDUDE" -C "$PHASE_AVRDUDE_CONF" \

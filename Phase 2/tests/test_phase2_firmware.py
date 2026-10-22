@@ -29,7 +29,8 @@ inline int digitalRead(int pin){ return pins[pin]; }
 inline void analogWrite(int,int){}
 inline void delay(unsigned long){}
 inline void delayMicroseconds(unsigned long){}
-inline unsigned long millis(){ static unsigned long t=0;return t+=50; }
+extern unsigned long fakeTime;
+inline unsigned long millis(){return fakeTime;}
 struct HardwareSerial {
   std::deque<uint8_t> rx;
   std::vector<uint8_t> tx;
@@ -61,33 +62,44 @@ TEST = r'''#include <cassert>
 int pins[32]={0};
 int modes[32]={0};
 HardwareSerial Serial;
+unsigned long fakeTime=0;
 // These declarations stand in for Arduino CLI's generated prototypes.
 void avrisp();
 uint8_t write_flash_pages(int);
 uint8_t write_eeprom_chunk(unsigned int,unsigned int);
 #include "relay.ino"
 int main(){
-  pins[2]=HIGH;
   setup();
-  assert(modes[2]==INPUT_PULLUP);
   assert(Serial.baud==19200 && tinySerial.baud==9600);
   assert(!tinySerial.listening);
+  fakeTime=100;
   loop();
   assert(!tinySerial.listening);
-  pins[2]=LOW;
+  fakeTime=300;
   loop();
   assert(tinySerial.listening);
   tinySerial.rx.push_back('A');tinySerial.rx.push_back('B');
-  Serial.rx.push_back('x');Serial.rx.push_back('\r');
   loop();
   assert(Serial.tx.size()==2 && Serial.tx[0]=='A' && Serial.tx[1]=='B');
-  assert(Serial.rx.empty());
-  pmode=1;
+  pmode=1;fakeTime=1000;
   loop();
   assert(!tinySerial.listening && pmode==1);
-  pmode=0;pins[2]=HIGH;
+  pmode=0;
+  loop();
+  assert(tinySerial.listening);
+  // Real STK500 GET_SYNC command, handled before forwarding queued telemetry.
+  tinySerial.rx.push_back('C');
+  Serial.rx.push_back('0');Serial.rx.push_back(0x20);
+  loop();
+  assert(Serial.rx.empty());
+  assert(!tinySerial.listening && lastHostActivity==1000);
+  assert(Serial.tx.size()==2);
+  fakeTime=1100;
   loop();
   assert(!tinySerial.listening);
+  fakeTime=1300;
+  loop();
+  assert(tinySerial.listening);
 }
 '''
 
@@ -103,6 +115,6 @@ def main():
         shutil.copyfile(ROOT/'phase-2-serial/ArduinoISP_Relay/ArduinoISP_Relay.ino',d/'relay.ino')
         subprocess.run([compiler,'-std=c++11','-I',str(d),str(d/'firmware_test.cpp'),'-o',str(d/'test')],check=True)
         subprocess.run([str(d/'test')],check=True)
-    print('PASS: actual relay setup/loop host simulation: baud setup, open-jumper mode, telemetry/keystroke handling, active-programming guard, and return to programmer mode.')
+    print('PASS: actual relay setup/loop host simulation: baud setup, idle forwarding, active ISP suppression, host request priority, and quiet interval.')
 
 if __name__=='__main__':main()

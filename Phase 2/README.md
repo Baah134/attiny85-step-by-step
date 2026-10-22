@@ -47,23 +47,23 @@ The installer currently supports macOS. Native Windows and Linux setup are not i
 
 1. Generate a relay sketch from a copy of standard ArduinoISP.
 2. Compile both new sketches, then upload the relay to the Uno.
-3. Add target TX → Uno D4 and a mode jumper between Uno D2 and GND.
+3. Add the telemetry wire: target physical pin 2 (PB3) → Uno digital pin 4.
 4. Introduce the 8 MHz telemetry application and a separate Phase 2 burn script.
-5. Program with D2 open; connect D2 to GND to monitor telemetry.
+5. Program the target, then open the monitor; relay forwarding is automatic.
 
 Phase 1 files and the shared installer remain unchanged. Phase 2 uses the same project-local tools, adds no system-package installation, and keeps the two baud rates explicit: 9600 from target to Uno, 19200 from Uno to terminal.
 
 | Phase 2 file | Purpose |
 | --- | --- |
 | [prepare_relay.sh](phase-2-serial/prepare_relay.sh) | Derive the relay without changing standard Phase 1 source. |
-| [ArduinoISP_Relay.ino](phase-2-serial/ArduinoISP_Relay/ArduinoISP_Relay.ino) | ISP/telemetry firmware selected by Uno D2. |
+| [ArduinoISP_Relay.ino](phase-2-serial/ArduinoISP_Relay/ArduinoISP_Relay.ino) | ISP firmware with automatic idle telemetry forwarding. |
 | [serial_demo.ino](phase-2-serial/serial_demo/serial_demo.ino) | ATtiny85 software serial at 9600 baud, built for 8 MHz. |
 | [check.sh](phase-2-serial/check.sh) | Compile both Phase 2 sketches without programming hardware. |
 | [upload_relay.sh](phase-2-serial/upload_relay.sh) | Upload the modified Uno firmware. |
 | [burn.sh](phase-2-serial/burn.sh) | Program the target at 8 MHz; optionally open the monitor with `-m`. |
 | [monitor.sh](phase-2-serial/monitor.sh) | View telemetry without programming again. |
 
-Read the Phase 2 walkthrough before using these commands; the mode jumper and capacitor must be in the indicated positions.
+Read the Phase 2 walkthrough before using these commands; the Uno reset capacitor must be in the indicated position.
 
 ## Validation
 
@@ -73,4 +73,4 @@ The optional tests use Python; setup and programming do not require Python. To r
 
 ### Phase 2 validation
 
-The Phase 2 scripts pass 23 simulated integration scenarios, and the generated relay's actual setup/loop passes a host C++ mode-logic simulation. Both new sketches also pass real AVR builds on Linux with the pinned cores. The telemetry build uses 2,542 bytes of ATtiny85 flash and 134 bytes of static RAM. Physical uploads, serial timing, and a clean macOS installation still need validation on your hardware. See the [Phase 2 review addendum](REVIEW.md#phase-2-addendum).
+The Phase 2 scripts pass 21 simulated integration scenarios, and the generated relay's actual setup/loop passes a host C++ relay-logic simulation. The unchanged telemetry sketch previously passed a real AVR build on Linux: 2,542 bytes of ATtiny85 flash and 134 bytes of static RAM. The revised automatic relay passes the host simulation; run `phase-2-serial/check.sh` to compile it with the AVR toolchain on your Mac. Physical uploads, serial timing, and a clean macOS installation still need validation on your hardware. See the [Phase 2 review addendum](REVIEW.md#phase-2-addendum).

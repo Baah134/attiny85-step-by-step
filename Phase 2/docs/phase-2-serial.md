@@ -27,19 +27,12 @@ The generator reads the preserved Phase 1 sketch and creates:
 It makes three changes:
 
 1. Adds `SoftwareSerial tinySerial(4, 3)` to receive the target's 9600-baud TX on Uno digital pin 4. Uno pin 3 is an unused software TX output; leave it unconnected.
-2. Initializes the receiver and a mode input on Uno digital pin 2.
-3. Adds a telemetry branch to `loop()`, while retaining the heartbeat and original ISP parser.
+2. Initializes the receiver at 9600 baud.
+3. Adds automatic forwarding when the programmer is idle, while retaining the heartbeat and giving host ISP requests priority.
 
-A mode jumper prevents telemetry from being mixed with the programmer protocol:
+There is no extra mode connection. The relay disables software reception during an active ISP session and waits 250 ms after host activity before resuming telemetry. You only close the monitor before programming and reopen it afterward.
 
-| Uno digital pin 2 | Mode | What the firmware does |
-| --- | --- | --- |
-| Open / unconnected | Programming | Uses the internal pull-up; disables software serial reception and handles ISP commands. |
-| Connected to Uno GND | Telemetry | Receives target bytes and forwards them to USB serial; discards terminal keystrokes. |
-
-The mode jumper is **Uno D2**, not ATtiny85 physical pin 2. A simple jumper wire or switch between Uno D2 and Uno GND is enough. Never connect D2 to 5V; the pull-up already establishes the open state.
-
-This explicit mode is useful when reprogramming an ATtiny85 that is already sending packets: its output cannot enter AVRDUDE's response stream. If the mode input changes during an active programming session, the firmware keeps servicing that session until it leaves programming mode.
+This shares one USB serial stream between programming replies and telemetry. An already-transmitting application can still put bytes into that stream before the initial handshake. If a later burn cannot synchronize, temporarily disconnect the telemetry wire at Uno D4 while programming, then reconnect it for monitoring. This is a troubleshooting fallback, not a normal mode-selection step.
 
 The generator uses macOS's built-in `awk`, not Python. It checks the expected source markers and stops if they do not match. Rerunning it recreates the Phase 2 sketch and overwrites custom edits to that generated copy. It never edits Phase 1.
 
@@ -55,15 +48,15 @@ bash ./phase-2-serial/check.sh
 
 **Checkpoint:** both sketches compile. The target build uses 8 MHz. The bundled Arduino AVR core supplies SoftwareSerial; no library-manager installation is needed.
 
-Disconnect one leg of the **Uno RESET-to-GND 10 µF capacitor**. Leave the **Uno D2 mode jumper open**. Then upload:
+Disconnect one leg of the **Uno RESET-to-GND 10 µF capacitor**, then upload:
 
 ```bash
 bash ./phase-2-serial/upload_relay.sh "${PORT:?Select your Uno port in Step 1}"
 ```
 
-The script pauses to confirm the capacitor and jumper state, then compiles and uploads the relay firmware. It stops on errors.
+The script pauses to confirm the capacitor is disconnected, then compiles and uploads the relay firmware. It stops on errors.
 
-After successful upload, reconnect the Uno reset capacitor. Leave Uno D2 open for the ATtiny85 programming step.
+After successful upload, reconnect the Uno reset capacitor.
 
 **Checkpoint:** the Uno now runs the modified relay sketch, while the ATtiny85 may still be running its Phase 1 blink application.
 
@@ -74,7 +67,6 @@ Disconnect USB power while changing wiring. Keep the existing ISP connections an
 | Additional connection | Purpose |
 | --- | --- |
 | ATtiny85 physical pin 2 (PB3 / software TX) → Uno digital pin 4 | Target telemetry to Uno software RX. |
-| Jumper/switch from Uno digital pin 2 → Uno GND | Mode selection; keep it OPEN until programming finishes. |
 
 Do not confuse Uno digital pin 4 with ATtiny85 physical pin 4, which is ground. Leave ATtiny85 physical pin 3 (unused software RX) and Uno digital pin 3 (unused software TX) unconnected.
 
@@ -148,17 +140,17 @@ Program first, without opening a monitor:
 bash ./phase-2-serial/burn.sh -p "${PORT:?Select your Uno port in Step 1}"
 ```
 
-At the prompt, confirm that Uno D2 is **open** and the Uno reset capacitor is **connected**, then press Enter. The script compiles for 8 MHz and programs the fuses and flash. It reports success only after AVRDUDE succeeds.
+At the prompt, confirm that the Uno reset capacitor is **connected**, then press Enter. The script compiles for 8 MHz and programs the fuses and flash. It reports success only after AVRDUDE succeeds.
 
 **Checkpoint:** the target gives five quick startup flashes, followed by regular LED cycles. The serial text appears in the next step.
 
-## 7. Select telemetry mode and display packets
+## 7. Display packets in the terminal
 
 ```bash
 bash ./phase-2-serial/monitor.sh "${PORT:?Select your Uno port in Step 1}"
 ```
 
-At the prompt, connect **Uno D2 to Uno GND**, keep the reset capacitor connected, then press Enter. The monitor opens at 19200 baud.
+Keep the reset capacitor connected. The monitor opens at 19200 baud; no mode wire or switch is needed. Use the monitor to read output, and do not type data into it: host bytes are interpreted as programmer commands by the relay.
 
 | Link | Baud rate |
 | --- | --- |
@@ -176,7 +168,7 @@ Illustrative output:
 
 The first packet number depends on when the monitor connects. The startup banner can be missed, which is normal. Serial transmission adds time to the loop, so packet timing is approximate; the integer uptime avoids floating-point printing overhead on the ATtiny85.
 
-Press **Ctrl+C** to exit. Open the Uno D2 jumper before programming again.
+Press **Ctrl+C** to exit. Close the monitor before programming again.
 
 ## 8. Combine burn and monitor after the separate steps work
 
@@ -184,28 +176,28 @@ Press **Ctrl+C** to exit. Open the Uno D2 jumper before programming again.
 bash ./phase-2-serial/burn.sh -p "${PORT:?Select your Uno port in Step 1}" -m
 ```
 
-This command pauses twice: first to select programming mode, then after a successful burn to select telemetry mode. If programming fails, the monitor does not start.
+This command pauses once to confirm the capacitor is connected, then programs the target and opens the monitor automatically. If programming fails, the monitor does not start.
 
 A precompiled HEX file can be supplied with `-f`; it must already be built for 8 MHz. Each invocation programs one chip. Disconnect target power before replacing it.
 
 ## 9. Explain the transition
 
-> In Phase 1 the Uno only acted as an ISP programmer. We copied that sketch and added a software serial receiver. A mode jumper keeps programming traffic separate from telemetry. We then compiled the ATtiny85 application at 8 MHz, set the matching clock fuse, and transmitted data at 9600 baud through the Uno to a 19200-baud terminal monitor.
+> In Phase 1 the Uno only acted as an ISP programmer. We copied that sketch and added a software serial receiver. The relay handles programmer requests first and forwards telemetry while idle. We then compiled the ATtiny85 application at 8 MHz, set the matching clock fuse, and transmitted data at 9600 baud through the Uno to a 19200-baud terminal monitor.
 
 ## Return to Phase 1
 
-Open Uno D2, exit the monitor, and use the Phase 1 burn command to restore 1 MHz blink. The Phase 2 relay can still program chips in its programming mode. To restore the exact standard Uno firmware too, run `phase-1-blink/upload_isp.sh` and follow its capacitor prompt.
+Exit the monitor and use the Phase 1 burn command to restore 1 MHz blink. The Phase 2 relay can still program chips automatically. To restore the exact standard Uno firmware too, run `phase-1-blink/upload_isp.sh` and follow its capacitor prompt.
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
-| AVRDUDE cannot synchronize | Exit the monitor, OPEN Uno D2, keep the Uno reset capacitor connected, and check the selected port. |
+| AVRDUDE cannot synchronize | Exit the monitor, keep the Uno reset capacitor connected, and check the selected port. If a running telemetry application interferes, disconnect its wire from Uno D4 for the burn and reconnect it afterward. |
 | Uno relay upload fails | Disconnect the Uno reset capacitor and close any monitor. |
-| No telemetry | Connect Uno D2 to GND, check target PB3 / physical pin 2 → Uno D4, and confirm common ground. |
+| No telemetry | Check target PB3 / physical pin 2 → Uno D4, and confirm the existing common ground. |
 | Garbled text | Keep the terminal at 19200, software serial endpoints at 9600, and the target build/fuses at 8 MHz. Check wiring and ground. |
 | Missing SoftwareSerial library | Rerun project setup. The scripts use the copy bundled with the pinned Arduino AVR core. |
 | Generator reports unexpected source | Restore the preserved standard Phase 1 ArduinoISP source before regenerating the relay. |
 | First banner or packet is missing | Telemetry starts before the monitor connects. Later readable packets establish forwarding. |
 
-These scripts cannot physically detect the capacitor, mode jumper, or target wiring; the prompts require you to check them. Host tests and build checks do not establish electrical timing or serial reliability on your actual board.
+These scripts cannot physically detect the capacitor or target wiring; the prompts require you to check them. Host tests and build checks do not establish electrical timing or serial reliability on your actual board.

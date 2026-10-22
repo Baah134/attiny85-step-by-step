@@ -1,8 +1,8 @@
-// Phase 2 additions: one-way telemetry and a hardware mode selector.
-// Uno D2 open = programmer; D2 connected to GND = telemetry.
+// Phase 2 additions: one-way telemetry with automatic ISP priority.
+// Target PB3 TX connects to Uno D4; no additional mode wire.
 #include <Arduino.h>
 #include <SoftwareSerial.h>
-const uint8_t RELAY_MODE_PIN = 2;
+unsigned long lastHostActivity = 0;
 SoftwareSerial tinySerial(4, 3); // Uno RX=D4; unused TX=D3
 
 // ArduinoISP
@@ -235,7 +235,6 @@ static BitBangedSPI SPI;
 
 void setup() {
   SERIAL.begin(BAUDRATE);
-  pinMode(RELAY_MODE_PIN, INPUT_PULLUP);
   tinySerial.begin(9600);
   tinySerial.stopListening();
 
@@ -314,20 +313,21 @@ void loop(void) {
 
   // light the heartbeat LED
   heartbeat();
-  // Keep telemetry separate from the STK500 programmer protocol.
-  if (!pmode && digitalRead(RELAY_MODE_PIN) == LOW) {
-    tinySerial.listen();
-    while (tinySerial.available()) {
-      SERIAL.write((uint8_t)tinySerial.read());
-    }
-    // Terminal keystrokes must not enter the ISP command parser.
-    while (SERIAL.available()) { SERIAL.read(); }
+  // Host requests take priority over target telemetry.
+  if (SERIAL.available()) {
+    tinySerial.stopListening();
+    lastHostActivity = millis();
+    avrisp();
     return;
   }
-  // Disable software RX interrupts during programmer communication.
-  tinySerial.stopListening();
-  if (SERIAL.available()) {
-    avrisp();
+  // Never receive/forward telemetry during ISP or shortly after host traffic.
+  if (pmode || (unsigned long)(millis() - lastHostActivity) < 250UL) {
+    tinySerial.stopListening();
+    return;
+  }
+  tinySerial.listen();
+  while (tinySerial.available() && !SERIAL.available()) {
+    SERIAL.write((uint8_t)tinySerial.read());
   }
 }
 

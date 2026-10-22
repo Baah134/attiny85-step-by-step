@@ -11,40 +11,56 @@ trap 'rm -f "$TEMP_FILE"' EXIT
 
 awk '
 BEGIN {
-    print "// Phase 2 additions: one-way telemetry and a hardware mode selector."
-    print "// Uno D2 open = programmer; D2 connected to GND = telemetry."
+    print "// Phase 2 additions: one-way telemetry with automatic ISP priority."
+    print "// Target PB3 TX connects to Uno D4; no additional mode wire."
     print "#include <Arduino.h>"
     print "#include <SoftwareSerial.h>"
-    print "const uint8_t RELAY_MODE_PIN = 2;"
+    print "unsigned long lastHostActivity = 0;"
     print "SoftwareSerial tinySerial(4, 3); // Uno RX=D4; unused TX=D3"
     print ""
 }
 {
+    if (skip_state > 0) {
+        if ((skip_state == 1 && $0 != "  if (SERIAL.available()) {") ||
+            (skip_state == 2 && $0 != "    avrisp();") ||
+            (skip_state == 3 && $0 != "  }")) {
+            print "Unexpected ArduinoISP serial-handler layout." > "/dev/stderr"
+            invalid_layout = 1
+            exit 1
+        }
+        skip_state++
+        if (skip_state == 4) skip_state = 0
+        next
+    }
     print
     if ($0 ~ /^  SERIAL.begin\(BAUDRATE\);$/) {
         setup_count++
-        print "  pinMode(RELAY_MODE_PIN, INPUT_PULLUP);"
         print "  tinySerial.begin(9600);"
         print "  tinySerial.stopListening();"
     }
     if ($0 ~ /^  heartbeat\(\);$/) {
         loop_count++
-        print "  // Keep telemetry separate from the STK500 programmer protocol."
-        print "  if (!pmode && digitalRead(RELAY_MODE_PIN) == LOW) {"
-        print "    tinySerial.listen();"
-        print "    while (tinySerial.available()) {"
-        print "      SERIAL.write((uint8_t)tinySerial.read());"
-        print "    }"
-        print "    // Terminal keystrokes must not enter the ISP command parser."
-        print "    while (SERIAL.available()) { SERIAL.read(); }"
+        print "  // Host requests take priority over target telemetry."
+        print "  if (SERIAL.available()) {"
+        print "    tinySerial.stopListening();"
+        print "    lastHostActivity = millis();"
+        print "    avrisp();"
         print "    return;"
         print "  }"
-        print "  // Disable software RX interrupts during programmer communication."
-        print "  tinySerial.stopListening();"
+        print "  // Never receive/forward telemetry during ISP or shortly after host traffic."
+        print "  if (pmode || (unsigned long)(millis() - lastHostActivity) < 250UL) {"
+        print "    tinySerial.stopListening();"
+        print "    return;"
+        print "  }"
+        print "  tinySerial.listen();"
+        print "  while (tinySerial.available() && !SERIAL.available()) {"
+        print "    SERIAL.write((uint8_t)tinySerial.read());"
+        print "  }"
+        skip_state = 1
     }
 }
 END {
-    if (setup_count != 1 || loop_count != 1) {
+    if (setup_count != 1 || loop_count != 1 || skip_state != 0 || invalid_layout) {
         print "Unexpected ArduinoISP source: expected one setup and one loop marker." > "/dev/stderr"
         exit 1
     }
