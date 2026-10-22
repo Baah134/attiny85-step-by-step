@@ -1,0 +1,8 @@
+.DS_Store
+.runtime/
+build/
+arduino-cli
+arduino-cli.exe
+*.elf
+*.o
+*.a
